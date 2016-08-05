@@ -1,4 +1,4 @@
-{% load static from staticfiles %}
+{% load assets %}
 
 <!DOCTYPE html>
 <html>
@@ -9,9 +9,9 @@
 
     <title>{% block title %}DRF Docs{% endblock %}</title>
 
-    {% block style %}
-    <link rel="stylesheet" href="{% static "rest_framework_docs/css/style.css" %}">
-    {% endblock %}
+    {% assets "drf_css" %}
+    <link rel="stylesheet" href="{{ ASSET_URL }}"/>
+    {% endassets %}
   </head>
 
   <body>
@@ -76,8 +76,8 @@
     </div>
 
     <!-- Dist.js - Inlcuded Live API, jQuery, Bootstrap -->
-    {% block script %}
-    <script type="text/javascript" src="{% static "rest_framework_docs/js/dist.min.js" %}"></script>
-    {% endblock %}
+    {% assets "drf_js" %}
+    <script type="text/javascript" src="{{ ASSET_URL }}"></script>
+    {% endassets %}
   </body>
 </html>
