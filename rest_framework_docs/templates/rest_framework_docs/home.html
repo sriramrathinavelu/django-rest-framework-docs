@@ -67,7 +67,14 @@
             <p class="fields-desc">Fields:</p>
               {%include "rest_framework_docs/components/fields_list.html" with fields=endpoint.fields %}
             {% elif not endpoint.errors %}
-            <p>No fields.</p>
+                <p>No fields.</p>
+            {% endif %}
+
+            {% if endpoint.queryparams_fields %}
+            <p class="fields-desc">Query Params:</p>
+              {%include "rest_framework_docs/components/fields_list.html" with fields=endpoint.queryparams_fields %}
+            {% elif not endpoint.errors %}
+                <p>No Query Params.</p>
             {% endif %}
           </div>
         </div>

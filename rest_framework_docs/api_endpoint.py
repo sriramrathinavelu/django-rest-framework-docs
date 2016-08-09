@@ -7,23 +7,31 @@ from rest_framework.serializers import BaseSerializer
 
 class ApiEndpoint(object):
 
-    def __init__(self, pattern, parent_pattern=None, drf_router=None):
+    def __init__(self, pattern, parent_pattern=tuple(), drf_router=None):
         self.drf_router = drf_router
         self.pattern = pattern
         self.callback = pattern.callback
         # self.name = pattern.name
         self.docstring = self.__get_docstring__()
-        self.name_parent = simplify_regex(parent_pattern.regex.pattern).strip('/') if parent_pattern else None
+        self.name_parent = '/'.join([
+            simplify_regex(p.regex.pattern).strip('/') for p in parent_pattern
+        ])
         self.path = self.__get_path__(parent_pattern)
+        self.method_action_map = {}
         self.allowed_methods = self.__get_allowed_methods__()
         # self.view_name = pattern.callback.__name__
         self.errors = None
         self.serializer_class = self.__get_serializer_class__()
         if self.serializer_class:
-            self.serializer = self.__get_serializer__()
+            self.serializer = self.__get_serializer__(self.serializer_class)
             self.fields = self.__get_serializer_fields__(self.serializer)
-            self.fields_json = self.__get_serializer_fields_json__()
-
+            self.fields_json = self.__get_serializer_fields_json__(self.fields)
+        # Can only be usefule if the Viewset uses queryparams_serializer mixin
+        self.queryparams_serializer_class = self.__get_queryparams_serializer_class__()
+        if self.queryparams_serializer_class:
+            self.queryparams_serializer = self.__get_serializer__(self.queryparams_serializer_class)
+            self.queryparams_fields = self.__get_serializer_fields__(self.queryparams_serializer)
+            self.queryparms_fields_json = self.__get_serializer_fields_json__(self.queryparams_fields)
         self.permissions = self.__get_permissions_class__()
 
     def __get_path__(self, parent_pattern):
@@ -56,14 +64,15 @@ class ApiEndpoint(object):
                         trailing_slash=self.drf_router.trailing_slash
                     )
                     if self.pattern.regex.pattern == regex:
+                        self.method_action_map = mapping
                         funcs, viewset_methods = zip(
                             *[(mapping[m], m.upper()) for m in self.callback.cls.http_method_names if m in mapping]
                         )
-                        viewset_methods = list(viewset_methods)
+                        viewset_methods = map(str, list(viewset_methods))
                         if len(set(funcs)) == 1:
                             self.docstring = inspect.getdoc(getattr(self.callback.cls, funcs[0]))
 
-        view_methods = [force_str(m).upper() for m in self.callback.cls.http_method_names if hasattr(self.callback.cls, m)]
+        view_methods = [str(force_str(m).upper()) for m in self.callback.cls.http_method_names if hasattr(self.callback.cls, m)]
         return viewset_methods + view_methods
 
     def __get_docstring__(self):
@@ -73,24 +82,47 @@ class ApiEndpoint(object):
         for perm_class in self.pattern.callback.cls.permission_classes:
             return perm_class.__name__
 
-    def __get_serializer__(self):
+    def __get_serializer__(self, serializer_class):
         try:
-            return self.serializer_class()
+            return serializer_class()
         except KeyError as e:
             self.errors = e
 
+    def __get_queryparams_serializer_class__(self):
+        if self.method_action_map.get('get') == 'list':
+            if hasattr(self.callback.cls, 'get_query_params_serializer_class'):
+                instance = self.callback.cls()
+                return instance.get_query_params_serializer_class()
+        return None
+
     def __get_serializer_class__(self):
-        if hasattr(self.callback.cls, 'serializer_class'):
-            return self.callback.cls.serializer_class
+        method_actions_map = {
+            'get': ['list', 'retrieve'],
+            'post': ['create'],
+            'put': ['update'],
+            'patch': ['partial_update'],
+            'delete': ['destroy'],
+        }
 
         if hasattr(self.callback.cls, 'get_serializer_class'):
-            return self.callback.cls.get_serializer_class(self.pattern.callback.cls())
+            instance = self.callback.cls()
+            for method in self.allowed_methods:
+                for action in method_actions_map.get(method.lower(), []):
+                    instance.action = action
+                    try:
+                        serializer_class = instance.get_serializer_class()
+                        print serializer_class
+                        if serializer_class:
+                            return serializer_class
+                    except:
+                        pass
+        return None
 
     def __get_serializer_fields__(self, serializer):
         fields = []
 
-        if hasattr(serializer, 'get_fields'):
-            for key, field in serializer.get_fields().items():
+        if hasattr(serializer, 'fields'):
+            for key, field in serializer.fields.items():
                 to_many_relation = True if hasattr(field, 'many') else False
                 sub_fields = []
 
@@ -111,7 +143,7 @@ class ApiEndpoint(object):
 
         return fields
 
-    def __get_serializer_fields_json__(self):
+    def __get_serializer_fields_json__(self, fields):
         # FIXME:
         # Return JSON or not?
-        return json.dumps(self.fields)
+        return json.dumps(fields)

@@ -51,6 +51,7 @@ var Data = React.createClass({
   },
 
   _renderFields: function () {
+    {console.log(this.props.fields);}
     return this.props.fields.map(function (field, key) {
 
       switch (field.type) {

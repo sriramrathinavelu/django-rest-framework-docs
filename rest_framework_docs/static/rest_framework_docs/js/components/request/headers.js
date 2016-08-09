@@ -33,7 +33,7 @@ var Headers = React.createClass({
         <FieldText
           name='authorization'
           value={this.state.authorization}
-          placeholder='Token 1234567890'
+          placeholder='Bearer 1234567890'
           onChange={this.handleChange.bind(this, 'authorization')} />
       </div>
     );

@@ -1,7 +1,11 @@
+import copy
+import inspect
+
 from importlib import import_module
 from django.conf import settings
 from django.core.urlresolvers import RegexURLResolver, RegexURLPattern
 from django.utils.module_loading import import_string
+from rest_framework.routers import BaseRouter
 from rest_framework.views import APIView
 from rest_framework_docs.api_endpoint import ApiEndpoint
 
@@ -22,12 +26,21 @@ class ApiDocumentation(object):
             self.get_all_view_names(root_urlconf.urlpatterns)
 
     def get_all_view_names(self, urlpatterns, parent_pattern=None):
+        # construct the list of parents leading to the URLPattern
+        if parent_pattern is None:
+            parent_pattern = []
         for pattern in urlpatterns:
+            parent_pattern_copy = copy.copy(parent_pattern)
             if isinstance(pattern, RegexURLResolver):
-                parent_pattern = None if pattern._regex == "^" else pattern
-                self.get_all_view_names(urlpatterns=pattern.url_patterns, parent_pattern=parent_pattern)
+                drf_router = self.get_drf_router(pattern.urlconf_name)
+                if drf_router:
+                    self.drf_router = drf_router
+                if not isinstance(pattern.urlconf_name, list):
+                    if pattern._regex != "^":
+                        parent_pattern_copy.append(pattern)
+                self.get_all_view_names(urlpatterns=pattern.url_patterns, parent_pattern=parent_pattern_copy)
             elif isinstance(pattern, RegexURLPattern) and self._is_drf_view(pattern) and not self._is_format_endpoint(pattern):
-                api_endpoint = ApiEndpoint(pattern, parent_pattern, self.drf_router)
+                api_endpoint = ApiEndpoint(pattern, parent_pattern_copy, self.drf_router)
                 self.endpoints.append(api_endpoint)
 
     def _is_drf_view(self, pattern):
@@ -36,6 +49,19 @@ class ApiDocumentation(object):
         """
         return hasattr(pattern.callback, 'cls') and issubclass(pattern.callback.cls, APIView)
 
+    def get_drf_router(self, urlconf_name):
+        """
+        Get the DRF router instance in the current module.
+
+        This implementation checks all members and pick
+        out the first members that is a descedant of BaseRouter
+        """
+        if inspect.ismodule(urlconf_name):
+            for attribute in dir(urlconf_name):
+                if isinstance(getattr(urlconf_name, attribute), BaseRouter):
+                    return getattr(urlconf_name, attribute)
+        return None
+
     def _is_format_endpoint(self, pattern):
         """
         Exclude endpoints with a "format" parameter
@@ -43,4 +69,7 @@ class ApiDocumentation(object):
         return '?P<format>' in pattern._regex
 
     def get_endpoints(self):
-        return self.endpoints
+        return sorted(
+            self.endpoints,
+            key=lambda x: x.name_parent,
+        )

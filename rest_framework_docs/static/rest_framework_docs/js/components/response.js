@@ -17,7 +17,7 @@ var Response = React.createClass({
   },
 
   saveToken: function () {
-    window.token = 'Token ' + this.state.payload.body.token;
+    window.token = 'Bearer ' + this.state.payload.body.token;
   },
 
   render: function () {
